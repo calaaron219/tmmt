@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+
+# build output
+.next/
+dist/
+out/
+
+# env files (secrets — never commit)
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+packages/db/prisma/*.db
+packages/db/prisma/*.db-journal
+
+# turbo / cache
+.turbo/
+*.tsbuildinfo
+
+# test coverage
+coverage/
+
+# misc
+*.log
+npm-debug.log*
+pnpm-debug.log*

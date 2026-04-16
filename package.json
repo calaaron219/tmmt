@@ -1,0 +1,18 @@
+{
+  "name": "tmmt",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TMOS: Time & Money Operating System",
+  "scripts": {
+    "dev:web": "pnpm --filter @tmmt/web dev",
+    "dev:api": "pnpm --filter @tmmt/api start:dev",
+    "dev": "pnpm run --parallel dev:web dev:api",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
