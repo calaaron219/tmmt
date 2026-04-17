@@ -29,4 +29,6 @@ jobs:
         run: pnpm typecheck
 
       - name: Prisma validate
+        env:
+          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
         run: pnpm --filter @tmmt/db exec prisma validate
