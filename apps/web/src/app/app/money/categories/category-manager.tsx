@@ -38,14 +38,14 @@ export function CategoryManager({
         <button
           type="button"
           onClick={() => setShowNewForm(true)}
-          className="w-full rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-600 transition hover:border-gray-400 hover:bg-gray-50"
+          className="w-full rounded-lg border border-dashed border-gray-300 bg-white px-4 py-4 text-base font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
         >
           + Add category
         </button>
       )}
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-600">
           Expense ({expense.length})
         </h2>
         <CategoryGroup
@@ -57,7 +57,7 @@ export function CategoryManager({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-gray-500">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-600">
           Income ({income.length})
         </h2>
         <CategoryGroup
@@ -118,15 +118,22 @@ function CategoryCard({
 }) {
   return (
     <li
-      className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 transition hover:shadow-sm"
+      className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3.5 transition hover:shadow-sm"
       style={{ borderLeftColor: category.color, borderLeftWidth: 4 }}
     >
-      <span className="text-xl">{category.icon ?? "•"}</span>
-      <span className="font-medium flex-1 truncate">{category.name}</span>
+      <span className="text-2xl" aria-hidden="true">
+        {category.icon ?? "•"}
+      </span>
+      <span
+        className="text-base font-medium text-gray-900 flex-1 truncate"
+        title={category.name}
+      >
+        {category.name}
+      </span>
       <button
         type="button"
         onClick={onEdit}
-        className="text-xs text-gray-400 hover:text-gray-900 transition"
+        className="text-sm font-medium text-gray-500 hover:text-gray-900 transition"
       >
         Edit
       </button>
@@ -239,7 +246,7 @@ function CategoryForm({
           onChange={(e) => setIcon(e.target.value)}
           placeholder="💰"
           maxLength={2}
-          className="w-14 text-center rounded-md border border-gray-300 px-2 py-2 text-lg"
+          className="w-14 text-center rounded-md border border-gray-300 px-2 py-2.5 text-xl"
           aria-label="Icon or emoji"
         />
         <input
@@ -249,12 +256,12 @@ function CategoryForm({
           required
           maxLength={50}
           placeholder="Category name"
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-md border border-gray-300 px-3 py-2.5 text-base text-gray-900"
         />
       </div>
 
       <div>
-        <p className="text-xs font-medium text-gray-600 mb-2">Color</p>
+        <p className="text-sm font-medium text-gray-700 mb-2">Color</p>
         <div className="flex flex-wrap gap-1.5">
           {PRESET_COLORS.map((c) => (
             <button
