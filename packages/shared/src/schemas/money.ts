@@ -39,8 +39,8 @@ export type ListTransactionsFilter = z.infer<
   typeof listTransactionsFilterSchema
 >;
 
-// Category creation — used both by the default-categories helper and (later)
-// the category management UI in PR #4.
+// Category creation — used both by the default-categories helper and
+// the category management UI.
 export const createCategoryInputSchema = z.object({
   name: z.string().min(1).max(50).trim(),
   color: z
@@ -50,3 +50,7 @@ export const createCategoryInputSchema = z.object({
   icon: z.string().max(10).optional().nullable(),
 });
 export type CreateCategoryInput = z.infer<typeof createCategoryInputSchema>;
+
+// Category update — same fields as create, all optional.
+export const updateCategoryInputSchema = createCategoryInputSchema.partial();
+export type UpdateCategoryInput = z.infer<typeof updateCategoryInputSchema>;
