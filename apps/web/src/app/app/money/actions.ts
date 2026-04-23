@@ -194,6 +194,74 @@ export async function updateCategory(
   }
 }
 
+// ─── CSV import ──────────────────────────────────────────
+
+export type ImportRowInput = {
+  amountCents: number;
+  type: "INCOME" | "EXPENSE";
+  occurredAt: Date;
+  rawDescription: string;
+  merchant?: string | null;
+};
+
+const MAX_IMPORT_ROWS = 1000;
+
+// Batch-create transactions from a parsed CSV. Runs the rules-based
+// categorizer on each row (using the user's categories of the right kind).
+// Returns a summary the UI can show.
+export async function bulkCreateTransactions(rows: ImportRowInput[]) {
+  const userId = await requireUser();
+
+  if (rows.length === 0) {
+    throw new Error("Nothing to import");
+  }
+  if (rows.length > MAX_IMPORT_ROWS) {
+    throw new Error(
+      `Too many rows (${rows.length}). Max ${MAX_IMPORT_ROWS} per import.`
+    );
+  }
+
+  // Fetch user's categories once; categorizer reuses this list.
+  const categories = await prisma.category.findMany({
+    where: { userId },
+    select: { id: true, name: true, kind: true },
+  });
+
+  const categoriesByKind = {
+    INCOME: categories.filter((c) => c.kind === "INCOME"),
+    EXPENSE: categories.filter((c) => c.kind === "EXPENSE"),
+  };
+
+  let autoCategorized = 0;
+  const data = rows.map((row) => {
+    const categoryId = categorize(
+      row.rawDescription,
+      categoriesByKind[row.type]
+    );
+    if (categoryId) autoCategorized++;
+
+    return {
+      userId,
+      amountCents: row.amountCents,
+      type: row.type,
+      categoryId,
+      occurredAt: row.occurredAt,
+      rawDescription: row.rawDescription,
+      merchant: row.merchant ?? null,
+      source: "CSV" as const,
+    };
+  });
+
+  const result = await prisma.transaction.createMany({ data });
+
+  revalidatePath("/app/money");
+  return {
+    imported: result.count,
+    autoCategorized,
+    uncategorized: result.count - autoCategorized,
+  };
+}
+
 export async function deleteCategory(id: string) {
   const userId = await requireUser();
   // deleteMany scoped by userId guards against deleting another user's

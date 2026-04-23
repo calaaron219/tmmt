@@ -25,12 +25,20 @@ export default async function MoneyPage({
               : `${transactions.length} transaction${transactions.length === 1 ? "" : "s"}`}
           </p>
         </div>
-        <Link
-          href="/app/money/categories"
-          className="text-sm text-gray-500 hover:text-gray-900 transition"
-        >
-          Manage categories →
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/app/money/import"
+            className="text-sm text-gray-500 hover:text-gray-900 transition"
+          >
+            Import CSV →
+          </Link>
+          <Link
+            href="/app/money/categories"
+            className="text-sm text-gray-500 hover:text-gray-900 transition"
+          >
+            Manage categories →
+          </Link>
+        </div>
       </div>
 
       <QuickAddForm categories={categories} />
