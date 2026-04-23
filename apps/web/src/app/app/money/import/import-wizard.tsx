@@ -199,9 +199,9 @@ export function ImportWizard() {
       <div className="space-y-4">
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-sm">
-              <span className="font-medium">{fileName}</span>
-              <span className="text-gray-500">
+            <div className="text-base">
+              <span className="font-medium text-gray-900">{fileName}</span>
+              <span className="text-gray-600">
                 {" "}
                 · {parseResult.rows.length} rows detected
               </span>
@@ -213,16 +213,18 @@ export function ImportWizard() {
                 setColumnMap({ date: null, amount: null, description: null });
                 setFileName(null);
               }}
-              className="text-xs text-gray-500 hover:text-gray-900 transition"
+              className="text-sm font-medium text-gray-500 hover:text-gray-900 transition"
             >
               Clear
             </button>
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
-          <h3 className="text-sm font-medium">Column mapping</h3>
-          <p className="text-xs text-gray-500">
+        <div className="rounded-lg border border-gray-200 bg-white p-5 space-y-3">
+          <h3 className="text-base font-semibold text-gray-900">
+            Column mapping
+          </h3>
+          <p className="text-sm text-gray-600">
             Pick which CSV column maps to each field. Negative amounts become
             expenses, positive become income.
           </p>
@@ -255,17 +257,24 @@ export function ImportWizard() {
         </div>
 
         <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-          <div className="px-4 py-2 border-b border-gray-100">
-            <h3 className="text-sm font-medium">
-              Preview (first {Math.min(10, parseResult.rows.length)} rows)
+          <div className="px-4 py-3 border-b border-gray-100">
+            <h3 className="text-base font-semibold text-gray-900">
+              Preview
             </h3>
+            <p className="text-xs text-gray-600 mt-0.5">
+              First {Math.min(10, parseResult.rows.length)} of{" "}
+              {parseResult.rows.length} rows
+            </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-gray-600">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-700">
                 <tr>
                   {parseResult.headers.map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-medium">
+                    <th
+                      key={h}
+                      className="px-3 py-2.5 text-left font-semibold whitespace-nowrap"
+                    >
                       {h}
                       {columnMap.date === h && " 📅"}
                       {columnMap.amount === h && " 💵"}
@@ -280,7 +289,8 @@ export function ImportWizard() {
                     {parseResult.headers.map((h) => (
                       <td
                         key={h}
-                        className="px-3 py-2 text-gray-700 truncate max-w-[200px]"
+                        className="px-3 py-2.5 text-gray-900 truncate max-w-[240px]"
+                        title={row[h]}
                       >
                         {row[h]}
                       </td>
@@ -348,17 +358,19 @@ function DropZone({ onFile }: { onFile: (file: File) => void }) {
         const file = e.dataTransfer.files[0];
         if (file) onFile(file);
       }}
-      className={`block rounded-lg border-2 border-dashed p-10 text-center cursor-pointer transition ${
+      className={`block rounded-lg border-2 border-dashed p-12 text-center cursor-pointer transition ${
         dragging
           ? "border-gray-900 bg-gray-50"
           : "border-gray-300 bg-white hover:border-gray-400"
       }`}
     >
-      <div className="text-3xl mb-2">📄</div>
-      <p className="text-sm font-medium">
+      <div className="text-4xl mb-3" aria-hidden="true">
+        📄
+      </div>
+      <p className="text-base font-medium text-gray-900">
         Drop a CSV here or click to pick
       </p>
-      <p className="mt-1 text-xs text-gray-500">
+      <p className="mt-1 text-sm text-gray-600">
         Max 1000 rows per import
       </p>
       <input
@@ -387,11 +399,11 @@ function ColumnSelect({
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-gray-600">{label}</span>
+      <span className="text-sm font-medium text-gray-700">{label}</span>
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
-        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        className="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2.5 text-base text-gray-900"
       >
         <option value="">— choose —</option>
         {headers.map((h) => (

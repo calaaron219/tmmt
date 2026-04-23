@@ -21,6 +21,7 @@ function formatDate(d: Date) {
   return new Date(d).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    year: "numeric",
   });
 }
 
@@ -31,8 +32,13 @@ export function TransactionList({
 }) {
   if (transactions.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-        No transactions for this period.
+      <div className="rounded-lg border border-dashed border-gray-300 bg-white p-10 text-center">
+        <p className="text-base text-gray-700">
+          No transactions for this period.
+        </p>
+        <p className="mt-1 text-sm text-gray-500">
+          Add one above or import a CSV to get started.
+        </p>
       </div>
     );
   }
@@ -60,16 +66,21 @@ function TransactionRow({ txn }: { txn: TransactionWithCategory }) {
 
   return (
     <li
-      className={`flex items-center justify-between gap-3 px-4 py-3 text-sm transition ${
+      className={`flex items-center justify-between gap-3 px-4 py-4 transition ${
         isPending ? "opacity-50" : ""
       }`}
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="font-medium truncate">{txn.rawDescription}</span>
+          <span
+            className="text-base font-medium text-gray-900 truncate"
+            title={txn.rawDescription}
+          >
+            {txn.rawDescription}
+          </span>
           {txn.category && (
             <span
-              className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
               style={{
                 backgroundColor: `${txn.category.color}20`,
                 color: txn.category.color,
@@ -80,15 +91,15 @@ function TransactionRow({ txn }: { txn: TransactionWithCategory }) {
             </span>
           )}
         </div>
-        <div className="text-xs text-gray-500 mt-0.5">
+        <div className="mt-1 text-sm text-gray-600">
           {formatDate(txn.occurredAt)}
           {txn.merchant ? ` · ${txn.merchant}` : ""}
         </div>
       </div>
       <div className="flex items-center gap-3">
         <span
-          className={`font-semibold tabular-nums ${
-            txn.type === "INCOME" ? "text-green-600" : "text-gray-900"
+          className={`text-base font-semibold tabular-nums ${
+            txn.type === "INCOME" ? "text-green-700" : "text-gray-900"
           }`}
         >
           {formatAmount(txn.amountCents, txn.type)}
@@ -97,7 +108,7 @@ function TransactionRow({ txn }: { txn: TransactionWithCategory }) {
           type="button"
           onClick={handleDelete}
           disabled={isPending}
-          className="text-xs text-gray-400 hover:text-red-600 transition"
+          className="text-gray-400 hover:text-red-600 transition text-base leading-none px-1"
           aria-label="Delete transaction"
         >
           ✕

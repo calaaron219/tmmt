@@ -6,10 +6,12 @@ export default async function AppHome() {
   const name = session?.user?.name?.split(" ")[0] ?? "there";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold">Hi, {name}!</h1>
-        <p className="mt-1 text-gray-500">
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Hi, {name}!
+        </h1>
+        <p className="mt-1 text-base text-gray-600">
           Welcome back to TMOS. More modules land each phase.
         </p>
       </div>
@@ -19,17 +21,23 @@ export default async function AppHome() {
           href="/app/money"
           className="group rounded-lg border border-gray-200 bg-white p-5 transition hover:border-gray-400 hover:shadow-sm"
         >
-          <div className="text-2xl">💰</div>
-          <h2 className="mt-2 font-medium">Money</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <div className="text-3xl" aria-hidden="true">
+            💰
+          </div>
+          <h2 className="mt-2 text-lg font-semibold text-gray-900">
+            Money
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">
             Track expenses, income, and budgets.
           </p>
         </Link>
 
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-5 opacity-50">
-          <div className="text-2xl">⏱</div>
-          <h2 className="mt-2 font-medium">Time</h2>
-          <p className="mt-1 text-sm text-gray-500">Coming in Phase 3.</p>
+        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-5 opacity-60">
+          <div className="text-3xl" aria-hidden="true">
+            ⏱
+          </div>
+          <h2 className="mt-2 text-lg font-semibold text-gray-900">Time</h2>
+          <p className="mt-1 text-sm text-gray-600">Coming in Phase 3.</p>
         </div>
       </div>
     </div>

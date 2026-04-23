@@ -36,8 +36,6 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
           merchant: null,
           note: null,
         });
-        // Reset the form by resetting state — the parent will re-render
-        // with the new transaction thanks to revalidatePath().
         const form = document.getElementById(
           "quick-add-form"
         ) as HTMLFormElement | null;
@@ -54,16 +52,16 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
     <form
       id="quick-add-form"
       action={action}
-      className="rounded-lg border border-gray-200 bg-white p-4 space-y-3"
+      className="rounded-lg border border-gray-200 bg-white p-5 space-y-4"
     >
       <div className="flex gap-2">
         <button
           type="button"
           onClick={() => setType("EXPENSE")}
-          className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition ${
             type === "EXPENSE"
               ? "bg-gray-900 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
           Expense
@@ -71,10 +69,10 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
         <button
           type="button"
           onClick={() => setType("INCOME")}
-          className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition ${
             type === "INCOME"
               ? "bg-gray-900 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
           Income
@@ -83,7 +81,9 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
-          <span className="text-xs font-medium text-gray-600">Amount ($)</span>
+          <span className="text-sm font-medium text-gray-700">
+            Amount ($)
+          </span>
           <input
             name="amount"
             type="number"
@@ -91,41 +91,42 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
             min="0.01"
             required
             placeholder="0.00"
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2.5 text-base text-gray-900"
           />
         </label>
         <label className="block">
-          <span className="text-xs font-medium text-gray-600">Date</span>
+          <span className="text-sm font-medium text-gray-700">Date</span>
           <input
             name="date"
             type="date"
             required
             defaultValue={today}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2.5 text-base text-gray-900"
           />
         </label>
       </div>
 
       <label className="block">
-        <span className="text-xs font-medium text-gray-600">Description</span>
+        <span className="text-sm font-medium text-gray-700">Description</span>
         <input
           name="description"
           type="text"
           required
           placeholder="e.g. Starbucks"
           maxLength={500}
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2.5 text-base text-gray-900"
         />
       </label>
 
       <label className="block">
-        <span className="text-xs font-medium text-gray-600">
-          Category (optional — auto-detected if blank)
+        <span className="text-sm font-medium text-gray-700">Category</span>
+        <span className="block text-xs text-gray-500 mt-0.5">
+          Leave blank to auto-detect from the description
         </span>
         <select
           name="categoryId"
           defaultValue=""
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2.5 text-base text-gray-900"
         >
           <option value="">Auto-categorize</option>
           {relevantCategories.map((c) => (
@@ -146,7 +147,7 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
       <button
         type="submit"
         disabled={isPending}
-        className="w-full rounded-md bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:opacity-50"
+        className="w-full rounded-md bg-gray-900 px-4 py-3 text-base font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50"
       >
         {isPending ? "Saving…" : "Add transaction"}
       </button>
