@@ -5,8 +5,12 @@ import { prisma } from "@tmmt/db";
 import {
   createTransactionInputSchema,
   listTransactionsFilterSchema,
+  createCategoryInputSchema,
+  updateCategoryInputSchema,
   type CreateTransactionInput,
   type ListTransactionsFilter,
+  type CreateCategoryInput,
+  type UpdateCategoryInput,
 } from "@tmmt/shared";
 import { categorize } from "@/lib/categorizer";
 import { ensureDefaultCategories } from "@/lib/default-categories";
@@ -113,5 +117,94 @@ export async function deleteTransaction(id: string) {
   if (result.count === 0) {
     throw new Error("Transaction not found");
   }
+  revalidatePath("/app/money");
+}
+
+// ─── Category mutations ──────────────────────────────────
+
+export async function createCategory(raw: CreateCategoryInput) {
+  const userId = await requireUser();
+  const input = createCategoryInputSchema.parse(raw);
+
+  // Prisma will throw P2002 if (userId, name) already exists — catch
+  // and surface a friendlier message.
+  try {
+    const category = await prisma.category.create({
+      data: {
+        userId,
+        name: input.name,
+        color: input.color,
+        kind: input.kind,
+        icon: input.icon ?? null,
+      },
+    });
+    revalidatePath("/app/money/categories");
+    revalidatePath("/app/money");
+    return category;
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      "code" in e &&
+      (e as { code?: string }).code === "P2002"
+    ) {
+      throw new Error(`A category named "${input.name}" already exists`);
+    }
+    throw e;
+  }
+}
+
+export async function updateCategory(
+  id: string,
+  raw: UpdateCategoryInput
+) {
+  const userId = await requireUser();
+  const input = updateCategoryInputSchema.parse(raw);
+
+  // Confirm ownership first
+  const owned = await prisma.category.findFirst({
+    where: { id, userId },
+    select: { id: true },
+  });
+  if (!owned) {
+    throw new Error("Category not found");
+  }
+
+  try {
+    const category = await prisma.category.update({
+      where: { id },
+      data: {
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.color !== undefined && { color: input.color }),
+        ...(input.kind !== undefined && { kind: input.kind }),
+        ...(input.icon !== undefined && { icon: input.icon }),
+      },
+    });
+    revalidatePath("/app/money/categories");
+    revalidatePath("/app/money");
+    return category;
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      "code" in e &&
+      (e as { code?: string }).code === "P2002"
+    ) {
+      throw new Error(`A category named "${input.name}" already exists`);
+    }
+    throw e;
+  }
+}
+
+export async function deleteCategory(id: string) {
+  const userId = await requireUser();
+  // deleteMany scoped by userId guards against deleting another user's
+  // category. Schema has onDelete: SetNull for Transaction.category, so
+  // transactions tagged with this category become uncategorized.
+  const result = await prisma.category.deleteMany({
+    where: { id, userId },
+  });
+  if (result.count === 0) {
+    throw new Error("Category not found");
+  }
+  revalidatePath("/app/money/categories");
   revalidatePath("/app/money");
 }
