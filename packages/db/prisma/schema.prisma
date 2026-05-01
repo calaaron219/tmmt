@@ -112,6 +112,16 @@ enum TransactionSource {
   API // pulled from Plaid etc. (Phase 7+)
 }
 
+// How the transaction's category was chosen.
+// MANUAL  — user picked it themselves
+// RULES   — keyword rules engine matched (Phase 1)
+// AI      — LLM fallback chose it (Phase 2)
+enum CategorizationSource {
+  MANUAL
+  RULES
+  AI
+}
+
 model Transaction {
   id             String            @id @default(cuid())
   userId         String
@@ -123,6 +133,10 @@ model Transaction {
   rawDescription String // original text from bank / user input
   merchant       String? // cleaned merchant name (e.g. "Starbucks")
   note           String? // user's own note
+
+  // How the categoryId was chosen, and how confident we were (AI only).
+  categorizationSource CategorizationSource @default(MANUAL)
+  confidence           Float? // 0..1, set by AI categorizer; null otherwise
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
