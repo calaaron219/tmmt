@@ -13,6 +13,7 @@ import {
   type UpdateCategoryInput,
 } from "@tmmt/shared";
 import { categorize } from "@/lib/categorizer";
+import { aiCategorizer } from "@/lib/ai-categorizer";
 import { ensureDefaultCategories } from "@/lib/default-categories";
 import { revalidatePath } from "next/cache";
 
@@ -70,7 +71,9 @@ export async function createTransaction(raw: CreateTransactionInput) {
   const userId = await requireUser();
   const input = createTransactionInputSchema.parse(raw);
 
-  // If the user didn't pick a category, try rule-based auto-categorization.
+  // If the user didn't pick a category, try rules first; if no rule
+  // fires, fall back to the AI categorizer. Both are best-effort —
+  // either failing just leaves the txn uncategorized.
   let categoryId = input.categoryId ?? null;
   if (!categoryId) {
     const categories = await prisma.category.findMany({
@@ -78,6 +81,20 @@ export async function createTransaction(raw: CreateTransactionInput) {
       select: { id: true, name: true, kind: true },
     });
     categoryId = categorize(input.rawDescription, categories);
+
+    if (!categoryId) {
+      const aiResult = await aiCategorizer.categorize({
+        rawDescription: input.rawDescription,
+        merchant: input.merchant ?? null,
+        amountCents: input.amountCents,
+        type: input.type,
+        availableCategories: categories.map((c) => ({
+          id: c.id,
+          name: c.name,
+        })),
+      });
+      categoryId = aiResult.categoryId;
+    }
   } else {
     // Defensive: make sure the category belongs to this user.
     const owned = await prisma.category.findFirst({
