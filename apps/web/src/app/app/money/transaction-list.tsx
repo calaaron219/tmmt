@@ -91,9 +91,31 @@ function TransactionRow({ txn }: { txn: TransactionWithCategory }) {
             </span>
           )}
         </div>
-        <div className="mt-1 text-sm text-gray-600">
-          {formatDate(txn.occurredAt)}
-          {txn.merchant ? ` · ${txn.merchant}` : ""}
+        <div className="mt-1 flex items-center gap-1.5 text-sm text-gray-600">
+          <span>
+            {formatDate(txn.occurredAt)}
+            {txn.merchant ? ` · ${txn.merchant}` : ""}
+          </span>
+          {txn.categorizationSource === "AI" && (
+            <span
+              className="text-xs text-gray-400"
+              title={
+                txn.confidence != null
+                  ? `Categorized by AI (${Math.round(txn.confidence * 100)}% confidence)`
+                  : "Categorized by AI"
+              }
+            >
+              · ✨ AI
+            </span>
+          )}
+          {txn.categorizationSource === "RULES" && (
+            <span
+              className="text-xs text-gray-400"
+              title="Categorized by keyword rules"
+            >
+              · 📋 Rules
+            </span>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-3">

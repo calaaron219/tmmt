@@ -67,6 +67,15 @@ export async function listCategories() {
   });
 }
 
+// Count of this user's transactions with no categoryId. Used to show
+// the "AI-categorize remaining" prompt on the money page.
+export async function countUncategorized() {
+  const userId = await requireUser();
+  return prisma.transaction.count({
+    where: { userId, categoryId: null },
+  });
+}
+
 export async function createTransaction(raw: CreateTransactionInput) {
   const userId = await requireUser();
   const input = createTransactionInputSchema.parse(raw);
@@ -75,12 +84,16 @@ export async function createTransaction(raw: CreateTransactionInput) {
   // fires, fall back to the AI categorizer. Both are best-effort —
   // either failing just leaves the txn uncategorized.
   let categoryId = input.categoryId ?? null;
+  let categorizationSource: "MANUAL" | "RULES" | "AI" = "MANUAL";
+  let confidence: number | null = null;
+
   if (!categoryId) {
     const categories = await prisma.category.findMany({
       where: { userId, kind: input.type },
       select: { id: true, name: true, kind: true },
     });
     categoryId = categorize(input.rawDescription, categories);
+    if (categoryId) categorizationSource = "RULES";
 
     if (!categoryId) {
       const aiResult = await aiCategorizer.categorize({
@@ -93,7 +106,11 @@ export async function createTransaction(raw: CreateTransactionInput) {
           name: c.name,
         })),
       });
-      categoryId = aiResult.categoryId;
+      if (aiResult.categoryId) {
+        categoryId = aiResult.categoryId;
+        categorizationSource = "AI";
+        confidence = aiResult.confidence;
+      }
     }
   } else {
     // Defensive: make sure the category belongs to this user.
@@ -117,6 +134,8 @@ export async function createTransaction(raw: CreateTransactionInput) {
       merchant: input.merchant ?? null,
       note: input.note ?? null,
       source: "MANUAL",
+      categorizationSource,
+      confidence,
     },
   });
 
@@ -266,6 +285,12 @@ export async function bulkCreateTransactions(rows: ImportRowInput[]) {
       rawDescription: row.rawDescription,
       merchant: row.merchant ?? null,
       source: "CSV" as const,
+      // CSV import is rules-only; AI fallback is opt-in via the bulk
+      // "AI-categorize remaining" action. Uncategorized rows record as
+      // MANUAL so the user can later trigger AI on them deliberately.
+      categorizationSource: (categoryId ? "RULES" : "MANUAL") as
+        | "RULES"
+        | "MANUAL",
     };
   });
 
@@ -276,6 +301,79 @@ export async function bulkCreateTransactions(rows: ImportRowInput[]) {
     imported: result.count,
     autoCategorized,
     uncategorized: result.count - autoCategorized,
+  };
+}
+
+// ─── Bulk AI categorization ──────────────────────────────
+
+// Cap per click — keeps Gemini cost predictable. User can click again
+// for the next batch if they have more than this.
+const MAX_AI_BATCH = 50;
+
+// Find all of this user's transactions that don't have a category, run
+// each through the AI categorizer, and update the ones the model is
+// confident about. Returns a summary the UI can show.
+export async function aiCategorizeUncategorized() {
+  const userId = await requireUser();
+
+  const uncategorized = await prisma.transaction.findMany({
+    where: { userId, categoryId: null },
+    orderBy: { occurredAt: "desc" },
+    take: MAX_AI_BATCH,
+  });
+
+  if (uncategorized.length === 0) {
+    return { processed: 0, categorized: 0, remaining: 0 };
+  }
+
+  const categories = await prisma.category.findMany({
+    where: { userId },
+    select: { id: true, name: true, kind: true },
+  });
+  const categoriesByKind = {
+    INCOME: categories.filter((c) => c.kind === "INCOME"),
+    EXPENSE: categories.filter((c) => c.kind === "EXPENSE"),
+  };
+
+  let categorized = 0;
+  // Sequential to stay under Gemini free-tier RPM and keep the cost
+  // predictable. ~50 rows × ~1s each = manageable. If this gets slow
+  // we can add bounded parallelism later.
+  for (const txn of uncategorized) {
+    const aiResult = await aiCategorizer.categorize({
+      rawDescription: txn.rawDescription,
+      merchant: txn.merchant,
+      amountCents: txn.amountCents,
+      type: txn.type,
+      availableCategories: categoriesByKind[txn.type].map((c) => ({
+        id: c.id,
+        name: c.name,
+      })),
+    });
+    if (aiResult.categoryId) {
+      await prisma.transaction.update({
+        where: { id: txn.id },
+        data: {
+          categoryId: aiResult.categoryId,
+          categorizationSource: "AI",
+          confidence: aiResult.confidence,
+        },
+      });
+      categorized++;
+    }
+  }
+
+  // Count how many uncategorized are still left so the UI can show
+  // "categorize next batch" if needed.
+  const remaining = await prisma.transaction.count({
+    where: { userId, categoryId: null },
+  });
+
+  revalidatePath("/app/money");
+  return {
+    processed: uncategorized.length,
+    categorized,
+    remaining,
   };
 }
 

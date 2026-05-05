@@ -4,6 +4,8 @@ import { z } from "zod";
 // sync by hand is fine for now; if we grow many more we can generate them.
 export const transactionTypeSchema = z.enum(["INCOME", "EXPENSE"]);
 export const transactionSourceSchema = z.enum(["MANUAL", "CSV", "API"]);
+export const categorizationSourceSchema = z.enum(["MANUAL", "RULES", "AI"]);
+export type CategorizationSource = z.infer<typeof categorizationSourceSchema>;
 export const categoryKindSchema = z.enum(["INCOME", "EXPENSE"]);
 
 // Input for creating a transaction manually from the UI.

@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { listCategories, listTransactions } from "./actions";
+import {
+  countUncategorized,
+  listCategories,
+  listTransactions,
+} from "./actions";
+import { AiCategorizeButton } from "./ai-categorize-button";
 import { QuickAddForm } from "./quick-add-form";
 import { TransactionList } from "./transaction-list";
 
@@ -9,9 +14,10 @@ export default async function MoneyPage({
   searchParams: Promise<{ month?: string }>;
 }) {
   const { month } = await searchParams;
-  const [categories, transactions] = await Promise.all([
+  const [categories, transactions, uncategorizedCount] = await Promise.all([
     listCategories(),
     listTransactions({ month }),
+    countUncategorized(),
   ]);
 
   return (
@@ -42,6 +48,8 @@ export default async function MoneyPage({
       </div>
 
       <QuickAddForm categories={categories} />
+
+      <AiCategorizeButton uncategorizedCount={uncategorizedCount} />
 
       <TransactionList transactions={transactions} />
     </div>
