@@ -32,13 +32,18 @@ export default async function AppHome() {
           </p>
         </Link>
 
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-5 opacity-60">
+        <Link
+          href="/app/time"
+          className="group rounded-lg border border-gray-200 bg-white p-5 transition hover:border-gray-400 hover:shadow-sm"
+        >
           <div className="text-3xl" aria-hidden="true">
             ⏱
           </div>
           <h2 className="mt-2 text-lg font-semibold text-gray-900">Time</h2>
-          <p className="mt-1 text-sm text-gray-600">Coming in Phase 3.</p>
-        </div>
+          <p className="mt-1 text-sm text-gray-600">
+            Capture tasks, set priorities, and track due dates.
+          </p>
+        </Link>
       </div>
     </div>
   );

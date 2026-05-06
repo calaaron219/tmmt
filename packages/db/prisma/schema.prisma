@@ -31,6 +31,7 @@ model User {
   categories    Category[]
   subscriptions Subscription[]
   budgets       Budget[]
+  tasks         Task[]
 }
 
 model Account {
@@ -194,4 +195,42 @@ model Budget {
 
   @@unique([userId, categoryId, month])
   @@index([userId, month])
+}
+
+// ─── Time ────────────────────────────────────────────
+// Tasks are the unit of "things to do" in TMOS. Phase 3 PR #1 ships
+// task CRUD; later PRs add Project (FK), TimeEntry (start/stop tracking),
+// Routine (recurring generation), and TimeBlock (calendar scheduling).
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id              String       @id @default(cuid())
+  userId          String
+  title           String
+  description     String?
+  status          TaskStatus   @default(TODO)
+  priority        TaskPriority @default(MEDIUM)
+  estimateMinutes Int? // user's expectation of how long it'll take
+  dueAt           DateTime?
+  completedAt     DateTime? // set when status transitions to DONE
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, dueAt])
 }
