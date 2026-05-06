@@ -33,6 +33,12 @@ export default async function MoneyPage({
         </div>
         <div className="flex items-center gap-4">
           <Link
+            href="/app/money/budgets"
+            className="text-sm font-medium text-gray-700 hover:text-gray-900 transition"
+          >
+            Budgets →
+          </Link>
+          <Link
             href="/app/money/import"
             className="text-sm font-medium text-gray-700 hover:text-gray-900 transition"
           >
