@@ -56,3 +56,17 @@ export type CreateCategoryInput = z.infer<typeof createCategoryInputSchema>;
 // Category update — same fields as create, all optional.
 export const updateCategoryInputSchema = createCategoryInputSchema.partial();
 export type UpdateCategoryInput = z.infer<typeof updateCategoryInputSchema>;
+
+// Budget upsert — set or update one (user, category, month) limit.
+// `month` is "YYYY-MM"; the action converts it to the first-of-month
+// DateTime that the schema's @@unique constraint expects.
+export const upsertBudgetInputSchema = z.object({
+  categoryId: z.string().cuid(),
+  month: z.string().regex(/^\d{4}-\d{2}$/, "Use YYYY-MM"),
+  monthlyLimitCents: z
+    .number()
+    .int()
+    .positive()
+    .max(999_999_999, "Limit is too large"),
+});
+export type UpsertBudgetInput = z.infer<typeof upsertBudgetInputSchema>;

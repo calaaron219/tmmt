@@ -7,10 +7,12 @@ import {
   listTransactionsFilterSchema,
   createCategoryInputSchema,
   updateCategoryInputSchema,
+  upsertBudgetInputSchema,
   type CreateTransactionInput,
   type ListTransactionsFilter,
   type CreateCategoryInput,
   type UpdateCategoryInput,
+  type UpsertBudgetInput,
 } from "@tmmt/shared";
 import { categorize } from "@/lib/categorizer";
 import { aiCategorizer } from "@/lib/ai-categorizer";
@@ -390,4 +392,202 @@ export async function deleteCategory(id: string) {
   }
   revalidatePath("/app/money/categories");
   revalidatePath("/app/money");
+}
+
+// ─── Budgets ─────────────────────────────────────────────
+
+// Convert "YYYY-MM" to the first-of-month DateTime used by the unique
+// constraint. UTC anchoring so reads/writes match regardless of TZ.
+function monthToDate(month: string): Date {
+  const [year, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(year, m - 1, 1));
+}
+
+// Returns the previous "YYYY-MM" (e.g. "2026-05" → "2026-04"). Used
+// by the UI to show "copy from previous month" prompts.
+function previousMonth(month: string): string {
+  const [year, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(year, m - 2, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export type BudgetRow = {
+  categoryId: string;
+  name: string;
+  color: string;
+  icon: string | null;
+  monthlyLimitCents: number | null;
+  spentCents: number;
+};
+
+// Returns one row per expense category for the given month, joined with
+// the user's budget (if any) and aggregate spend on EXPENSE transactions
+// in that category for that month.
+//
+// Spend definition: SUM(amountCents) WHERE type='EXPENSE'. Refunds entered
+// as INCOME on an expense category are NOT subtracted — see
+// docs/decisions/phase-2-budgets.md decision 4.
+export async function listBudgetsWithSpend(month: string): Promise<{
+  rows: BudgetRow[];
+  hasPreviousMonthBudgets: boolean;
+  previousMonth: string;
+}> {
+  const userId = await requireUser();
+
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error("Invalid month — use YYYY-MM");
+  }
+
+  const monthStart = monthToDate(month);
+  const monthEnd = new Date(monthStart);
+  monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+
+  const prevMonth = previousMonth(month);
+  const prevMonthStart = monthToDate(prevMonth);
+
+  const [categories, budgets, spendByCategory, prevBudgetCount] =
+    await Promise.all([
+      prisma.category.findMany({
+        where: { userId, kind: "EXPENSE" },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, color: true, icon: true },
+      }),
+      prisma.budget.findMany({
+        where: { userId, month: monthStart },
+      }),
+      prisma.transaction.groupBy({
+        by: ["categoryId"],
+        where: {
+          userId,
+          type: "EXPENSE",
+          categoryId: { not: null },
+          occurredAt: { gte: monthStart, lt: monthEnd },
+        },
+        _sum: { amountCents: true },
+      }),
+      prisma.budget.count({
+        where: { userId, month: prevMonthStart },
+      }),
+    ]);
+
+  const budgetByCategory = new Map(budgets.map((b) => [b.categoryId, b]));
+  const spendByCategoryMap = new Map(
+    spendByCategory.map((s) => [s.categoryId, s._sum.amountCents ?? 0])
+  );
+
+  const rows: BudgetRow[] = categories.map((c) => ({
+    categoryId: c.id,
+    name: c.name,
+    color: c.color,
+    icon: c.icon,
+    monthlyLimitCents: budgetByCategory.get(c.id)?.monthlyLimitCents ?? null,
+    spentCents: spendByCategoryMap.get(c.id) ?? 0,
+  }));
+
+  return {
+    rows,
+    hasPreviousMonthBudgets: prevBudgetCount > 0,
+    previousMonth: prevMonth,
+  };
+}
+
+export async function upsertBudget(raw: UpsertBudgetInput) {
+  const userId = await requireUser();
+  const input = upsertBudgetInputSchema.parse(raw);
+
+  // Confirm the category belongs to this user (and is EXPENSE — we
+  // don't budget income categories).
+  const category = await prisma.category.findFirst({
+    where: { id: input.categoryId, userId },
+    select: { id: true, kind: true },
+  });
+  if (!category) {
+    throw new Error("Category not found");
+  }
+  if (category.kind !== "EXPENSE") {
+    throw new Error("Only expense categories can have budgets");
+  }
+
+  const monthStart = monthToDate(input.month);
+
+  const budget = await prisma.budget.upsert({
+    where: {
+      userId_categoryId_month: {
+        userId,
+        categoryId: input.categoryId,
+        month: monthStart,
+      },
+    },
+    update: { monthlyLimitCents: input.monthlyLimitCents },
+    create: {
+      userId,
+      categoryId: input.categoryId,
+      month: monthStart,
+      monthlyLimitCents: input.monthlyLimitCents,
+    },
+  });
+
+  revalidatePath("/app/money/budgets");
+  return budget;
+}
+
+export async function deleteBudget(categoryId: string, month: string) {
+  const userId = await requireUser();
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error("Invalid month — use YYYY-MM");
+  }
+
+  const monthStart = monthToDate(month);
+  const result = await prisma.budget.deleteMany({
+    where: { userId, categoryId, month: monthStart },
+  });
+
+  if (result.count === 0) {
+    throw new Error("Budget not found");
+  }
+  revalidatePath("/app/money/budgets");
+}
+
+// Copies all budgets from the previous month into the given month
+// (skips categories that already have a budget for the target month).
+// Used by the "no budgets yet" prompt.
+export async function copyBudgetsFromPreviousMonth(month: string) {
+  const userId = await requireUser();
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error("Invalid month — use YYYY-MM");
+  }
+
+  const monthStart = monthToDate(month);
+  const prevMonthStart = monthToDate(previousMonth(month));
+
+  const [prevBudgets, existingThisMonth] = await Promise.all([
+    prisma.budget.findMany({ where: { userId, month: prevMonthStart } }),
+    prisma.budget.findMany({
+      where: { userId, month: monthStart },
+      select: { categoryId: true },
+    }),
+  ]);
+
+  const existingCategoryIds = new Set(
+    existingThisMonth.map((b) => b.categoryId)
+  );
+  const toCopy = prevBudgets.filter(
+    (b) => !existingCategoryIds.has(b.categoryId)
+  );
+
+  if (toCopy.length === 0) {
+    return { copied: 0 };
+  }
+
+  const result = await prisma.budget.createMany({
+    data: toCopy.map((b) => ({
+      userId,
+      categoryId: b.categoryId,
+      month: monthStart,
+      monthlyLimitCents: b.monthlyLimitCents,
+    })),
+  });
+
+  revalidatePath("/app/money/budgets");
+  return { copied: result.count };
 }
