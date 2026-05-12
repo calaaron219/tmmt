@@ -37,3 +37,10 @@ export const updateTaskStatusInputSchema = z.object({
   status: taskStatusSchema,
 });
 export type UpdateTaskStatusInput = z.infer<typeof updateTaskStatusInputSchema>;
+
+// ─── Time entries ────────────────────────────────────────
+// Starting a timer requires a task. (Decision 2.2 — task-required for v1.)
+export const startTimerInputSchema = z.object({
+  taskId: z.string().cuid(),
+});
+export type StartTimerInput = z.infer<typeof startTimerInputSchema>;
