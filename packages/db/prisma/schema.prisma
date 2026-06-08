@@ -32,6 +32,7 @@ model User {
   subscriptions Subscription[]
   budgets       Budget[]
   tasks         Task[]
+  timeEntries   TimeEntry[]
 }
 
 model Account {
@@ -229,8 +230,32 @@ model Task {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeEntries TimeEntry[]
 
   @@index([userId, status])
   @@index([userId, dueAt])
+}
+
+// One row per tracked time interval. Created when the user clicks "start";
+// `endedAt` and `durationSeconds` are set when "stop" is clicked. Schema
+// invariant (enforced by listener logic, not constraints): at most one
+// row per user with endedAt = null at any time.
+model TimeEntry {
+  id              String    @id @default(cuid())
+  userId          String
+  taskId          String
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime? // null while running
+  durationSeconds Int? // snapshotted at stop time; null while running
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  // Fast lookup of the active timer for a user (queried on every page load).
+  @@index([userId, endedAt])
+  @@index([taskId])
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { listTasks } from "./actions";
+import { getActiveTimer, listTasks } from "./actions";
+import { ActiveTimerBanner } from "./active-timer-banner";
 import { QuickAddForm } from "./quick-add-form";
 import { TaskList } from "./task-list";
 
@@ -11,7 +12,10 @@ export default async function TimePage({
   const { show } = await searchParams;
   const includeDone = show === "all";
 
-  const tasks = await listTasks({ includeDone });
+  const [tasks, activeTimer] = await Promise.all([
+    listTasks({ includeDone }),
+    getActiveTimer(),
+  ]);
 
   const openCount = tasks.filter(
     (t) => t.status === "TODO" || t.status === "IN_PROGRESS"
@@ -35,6 +39,8 @@ export default async function TimePage({
           {includeDone ? "Hide completed" : "Show completed"}
         </Link>
       </div>
+
+      {activeTimer && <ActiveTimerBanner active={activeTimer} />}
 
       <QuickAddForm />
 

@@ -1,8 +1,13 @@
 "use client";
 
 import { useTransition } from "react";
-import { deleteTask, updateTaskStatus } from "./actions";
-import type { Task } from "@tmmt/db";
+import {
+  deleteTask,
+  startTimer,
+  stopActiveTimer,
+  updateTaskStatus,
+  type TaskWithTracking,
+} from "./actions";
 
 const PRIORITY_STYLE: Record<
   "LOW" | "MEDIUM" | "HIGH",
@@ -39,7 +44,19 @@ function formatEstimate(min: number | null): string | null {
   return rem === 0 ? `${hours}h` : `${hours}h ${rem}m`;
 }
 
-export function TaskList({ tasks }: { tasks: Task[] }) {
+// Compact "Xh Ym" / "Xm" / "Xs" for accumulated tracked time. Server-rendered
+// only — the live ticker lives in active-timer-banner.tsx.
+function formatTrackedSeconds(seconds: number): string | null {
+  if (seconds <= 0) return null;
+  if (seconds < 60) return `${seconds}s`;
+  const totalMinutes = Math.floor(seconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const rem = totalMinutes % 60;
+  return rem === 0 ? `${hours}h` : `${hours}h ${rem}m`;
+}
+
+export function TaskList({ tasks }: { tasks: TaskWithTracking[] }) {
   if (tasks.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 bg-white p-10 text-center">
@@ -62,12 +79,13 @@ export function TaskList({ tasks }: { tasks: Task[] }) {
   );
 }
 
-function TaskRow({ task }: { task: Task }) {
+function TaskRow({ task }: { task: TaskWithTracking }) {
   const [isPending, startTransition] = useTransition();
   const isDone = task.status === "DONE";
   const isCanceled = task.status === "CANCELED";
   const dueLabel = !isDone && !isCanceled ? formatDue(task.dueAt) : null;
   const estimateLabel = formatEstimate(task.estimateMinutes);
+  const trackedLabel = formatTrackedSeconds(task.trackedSeconds);
 
   function toggleDone() {
     startTransition(async () => {
@@ -85,11 +103,25 @@ function TaskRow({ task }: { task: Task }) {
     });
   }
 
+  function toggleTimer() {
+    startTransition(async () => {
+      if (task.isActive) {
+        await stopActiveTimer();
+      } else {
+        await startTimer({ taskId: task.id });
+      }
+    });
+  }
+
   const isOverdue =
     !isDone &&
     !isCanceled &&
     task.dueAt &&
     new Date(task.dueAt) < new Date(new Date().toDateString());
+
+  const overEstimate =
+    task.estimateMinutes != null &&
+    task.trackedSeconds > task.estimateMinutes * 60;
 
   return (
     <li
@@ -131,28 +163,52 @@ function TaskRow({ task }: { task: Task }) {
               </span>
             )}
           </div>
-          {(dueLabel || estimateLabel) && (
-            <div className="mt-1 flex items-center gap-2 text-sm text-gray-600">
+          {(dueLabel || estimateLabel || trackedLabel) && (
+            <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-gray-600">
               {dueLabel && (
                 <span className={isOverdue ? "text-red-700 font-medium" : ""}>
                   {dueLabel}
                 </span>
               )}
-              {dueLabel && estimateLabel && <span>·</span>}
-              {estimateLabel && <span>{estimateLabel}</span>}
+              {dueLabel && (estimateLabel || trackedLabel) && <span>·</span>}
+              {estimateLabel && <span>Est. {estimateLabel}</span>}
+              {estimateLabel && trackedLabel && <span>·</span>}
+              {trackedLabel && (
+                <span className={overEstimate ? "text-red-700 font-medium" : ""}>
+                  Tracked {trackedLabel}
+                </span>
+              )}
             </div>
           )}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={handleDelete}
-        disabled={isPending}
-        className="text-gray-400 hover:text-red-600 transition text-base leading-none px-1"
-        aria-label="Delete task"
-      >
-        ✕
-      </button>
+      <div className="flex items-center gap-1">
+        {!isDone && !isCanceled && (
+          <button
+            type="button"
+            onClick={toggleTimer}
+            disabled={isPending}
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm transition ${
+              task.isActive
+                ? "bg-red-50 text-red-700 hover:bg-red-100"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            } disabled:opacity-50`}
+            aria-label={task.isActive ? "Stop timer" : "Start timer"}
+            title={task.isActive ? "Stop timer" : "Start timer"}
+          >
+            {task.isActive ? "■" : "▶"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={isPending}
+          className="text-gray-400 hover:text-red-600 transition text-base leading-none px-1"
+          aria-label="Delete task"
+        >
+          ✕
+        </button>
+      </div>
     </li>
   );
 }
