@@ -7,12 +7,16 @@ import {
   listTasksFilterSchema,
   startTimerInputSchema,
   updateTaskStatusInputSchema,
+  createProjectInputSchema,
+  updateProjectInputSchema,
   type CreateTaskInput,
   type ListTasksFilter,
   type StartTimerInput,
   type UpdateTaskStatusInput,
+  type CreateProjectInput,
+  type UpdateProjectInput,
 } from "@tmmt/shared";
-import type { Task } from "@tmmt/db";
+import type { Task, Project } from "@tmmt/db";
 import { revalidatePath } from "next/cache";
 
 async function requireUser() {
@@ -25,10 +29,12 @@ async function requireUser() {
 
 // Task row augmented with the per-task tracked-time info the UI needs.
 // `trackedSeconds` is the sum of completed entries; `isActive` is true if
-// the current running timer (if any) is on this task.
+// the current running timer (if any) is on this task. `project` is the
+// minimal project info needed to render the color accent + label.
 export type TaskWithTracking = Task & {
   trackedSeconds: number;
   isActive: boolean;
+  project: Pick<Project, "id" | "name" | "color" | "icon"> | null;
 };
 
 // Default: return TODO + IN_PROGRESS only. Pass { includeDone: true } to
@@ -43,6 +49,7 @@ export async function listTasks(
   const where: {
     userId: string;
     status?: { in: ("TODO" | "IN_PROGRESS" | "DONE" | "CANCELED")[] };
+    projectId?: string | null;
   } = { userId };
 
   if (filters.status) {
@@ -51,11 +58,20 @@ export async function listTasks(
     where.status = { in: ["TODO", "IN_PROGRESS"] };
   }
 
+  if (filters.projectId === "none") {
+    where.projectId = null;
+  } else if (filters.projectId) {
+    where.projectId = filters.projectId;
+  }
+
   const [tasks, completedSums, active] = await Promise.all([
     prisma.task.findMany({
       where,
       // Two-key sort: open before done, then by dueAt nulls-last, then newest first.
       orderBy: [{ status: "asc" }, { dueAt: "asc" }, { createdAt: "desc" }],
+      include: {
+        project: { select: { id: true, name: true, color: true, icon: true } },
+      },
       take: 200,
     }),
     prisma.timeEntry.groupBy({
@@ -84,6 +100,17 @@ export async function createTask(raw: CreateTaskInput) {
   const userId = await requireUser();
   const input = createTaskInputSchema.parse(raw);
 
+  // Defensive: if a projectId was passed, confirm it belongs to this user.
+  if (input.projectId) {
+    const owned = await prisma.project.findFirst({
+      where: { id: input.projectId, userId },
+      select: { id: true },
+    });
+    if (!owned) {
+      throw new Error("Project not found");
+    }
+  }
+
   const task = await prisma.task.create({
     data: {
       userId,
@@ -92,6 +119,7 @@ export async function createTask(raw: CreateTaskInput) {
       priority: input.priority,
       estimateMinutes: input.estimateMinutes ?? null,
       dueAt: input.dueAt ?? null,
+      projectId: input.projectId ?? null,
     },
   });
 
@@ -228,6 +256,94 @@ export async function startTimer(raw: StartTimerInput): Promise<{
 
   revalidatePath("/app/time");
   return { stopped };
+}
+
+// ─── Projects ────────────────────────────────────────────
+
+export async function listProjects(): Promise<Project[]> {
+  const userId = await requireUser();
+  return prisma.project.findMany({
+    where: { userId },
+    orderBy: { name: "asc" },
+  });
+}
+
+export async function createProject(raw: CreateProjectInput) {
+  const userId = await requireUser();
+  const input = createProjectInputSchema.parse(raw);
+
+  try {
+    const project = await prisma.project.create({
+      data: {
+        userId,
+        name: input.name,
+        color: input.color,
+        icon: input.icon ?? null,
+      },
+    });
+    revalidatePath("/app/time/projects");
+    revalidatePath("/app/time");
+    return project;
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      "code" in e &&
+      (e as { code?: string }).code === "P2002"
+    ) {
+      throw new Error(`A project named "${input.name}" already exists`);
+    }
+    throw e;
+  }
+}
+
+export async function updateProject(id: string, raw: UpdateProjectInput) {
+  const userId = await requireUser();
+  const input = updateProjectInputSchema.parse(raw);
+
+  const owned = await prisma.project.findFirst({
+    where: { id, userId },
+    select: { id: true },
+  });
+  if (!owned) {
+    throw new Error("Project not found");
+  }
+
+  try {
+    const project = await prisma.project.update({
+      where: { id },
+      data: {
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.color !== undefined && { color: input.color }),
+        ...(input.icon !== undefined && { icon: input.icon }),
+      },
+    });
+    revalidatePath("/app/time/projects");
+    revalidatePath("/app/time");
+    return project;
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      "code" in e &&
+      (e as { code?: string }).code === "P2002"
+    ) {
+      throw new Error(`A project named "${input.name}" already exists`);
+    }
+    throw e;
+  }
+}
+
+// Schema FK is onDelete: SetNull, so tasks survive — they just become
+// project-less. Matches the Category → Transaction pattern.
+export async function deleteProject(id: string) {
+  const userId = await requireUser();
+  const result = await prisma.project.deleteMany({
+    where: { id, userId },
+  });
+  if (result.count === 0) {
+    throw new Error("Project not found");
+  }
+  revalidatePath("/app/time/projects");
+  revalidatePath("/app/time");
 }
 
 // Stops the user's currently-running timer (no-op if there isn't one).

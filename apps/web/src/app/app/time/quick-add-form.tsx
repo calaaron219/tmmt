@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import type { Project } from "@tmmt/db";
 import { createTask } from "./actions";
 import type { TaskPriority } from "@tmmt/shared";
 
-export function QuickAddForm() {
+export function QuickAddForm({ projects }: { projects: Project[] }) {
   const [title, setTitle] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("MEDIUM");
   const [dueAt, setDueAt] = useState("");
   const [estimate, setEstimate] = useState("");
+  const [projectId, setProjectId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -36,11 +38,13 @@ export function QuickAddForm() {
           priority,
           estimateMinutes,
           dueAt: dueAt ? new Date(dueAt) : null,
+          projectId: projectId === "" ? null : projectId,
         });
         setTitle("");
         setDueAt("");
         setEstimate("");
         setPriority("MEDIUM");
+        setProjectId("");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not save");
       }
@@ -71,6 +75,23 @@ export function QuickAddForm() {
           <option value="MEDIUM">Medium</option>
           <option value="HIGH">High</option>
         </select>
+        {projects.length > 0 && (
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            disabled={isPending}
+            className="rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:border-gray-900 focus:outline-none"
+            aria-label="Project"
+          >
+            <option value="">No project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.icon ? `${p.icon} ` : ""}
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           type="date"
           value={dueAt}

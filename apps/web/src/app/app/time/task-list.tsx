@@ -123,11 +123,19 @@ function TaskRow({ task }: { task: TaskWithTracking }) {
     task.estimateMinutes != null &&
     task.trackedSeconds > task.estimateMinutes * 60;
 
+  // Subtle project accent: a thin colored bar on the left edge of the row.
+  // No border at all when the task has no project — keeps rows visually flat
+  // by default (decision: subtle).
+  const accentStyle = task.project
+    ? { borderLeftColor: task.project.color, borderLeftWidth: 3 }
+    : undefined;
+
   return (
     <li
       className={`flex items-start justify-between gap-3 px-4 py-3 transition ${
-        isPending ? "opacity-50" : ""
-      }`}
+        task.project ? "border-l-[3px]" : ""
+      } ${isPending ? "opacity-50" : ""}`}
+      style={accentStyle}
     >
       <div className="flex items-start gap-3 min-w-0 flex-1">
         <button
@@ -163,8 +171,17 @@ function TaskRow({ task }: { task: TaskWithTracking }) {
               </span>
             )}
           </div>
-          {(dueLabel || estimateLabel || trackedLabel) && (
+          {(dueLabel || estimateLabel || trackedLabel || task.project) && (
             <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-gray-600">
+              {task.project && (
+                <span className="text-gray-500">
+                  {task.project.icon ? `${task.project.icon} ` : ""}
+                  {task.project.name}
+                </span>
+              )}
+              {task.project && (dueLabel || estimateLabel || trackedLabel) && (
+                <span>·</span>
+              )}
               {dueLabel && (
                 <span className={isOverdue ? "text-red-700 font-medium" : ""}>
                   {dueLabel}
