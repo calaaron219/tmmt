@@ -19,6 +19,7 @@ export const createTaskInputSchema = z.object({
   priority: taskPrioritySchema.default("MEDIUM"),
   estimateMinutes: z.number().int().positive().max(60 * 24).optional().nullable(),
   dueAt: z.coerce.date().optional().nullable(),
+  projectId: z.string().cuid().optional().nullable(),
 });
 export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;
 
@@ -27,6 +28,9 @@ export const listTasksFilterSchema = z.object({
   status: taskStatusSchema.optional(),
   // "include DONE" toggle for the UI; cheaper than passing all 4 statuses.
   includeDone: z.boolean().optional(),
+  // Filter by project. The literal "none" matches tasks with no project;
+  // a cuid matches that specific project; omitted means "any".
+  projectId: z.union([z.literal("none"), z.string().cuid()]).optional(),
 });
 export type ListTasksFilter = z.infer<typeof listTasksFilterSchema>;
 
@@ -44,3 +48,17 @@ export const startTimerInputSchema = z.object({
   taskId: z.string().cuid(),
 });
 export type StartTimerInput = z.infer<typeof startTimerInputSchema>;
+
+// ─── Projects ────────────────────────────────────────────
+// Projects group tasks. Schema mirrors Category (name + color + optional icon).
+export const createProjectInputSchema = z.object({
+  name: z.string().min(1).max(50).trim(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Must be hex like #3b82f6"),
+  icon: z.string().max(10).optional().nullable(),
+});
+export type CreateProjectInput = z.infer<typeof createProjectInputSchema>;
+
+export const updateProjectInputSchema = createProjectInputSchema.partial();
+export type UpdateProjectInput = z.infer<typeof updateProjectInputSchema>;
