@@ -80,3 +80,49 @@ export type CreateRoutineInput = z.infer<typeof createRoutineInputSchema>;
 
 export const updateRoutineInputSchema = createRoutineInputSchema.partial();
 export type UpdateRoutineInput = z.infer<typeof updateRoutineInputSchema>;
+
+// ─── Time blocks (calendar) ──────────────────────────────
+// A block represents *planned* time on the week-view calendar.
+// v1 forbids cross-midnight blocks (enforced in the action) and requires
+// endsAt > startsAt. taskId is optional — free-form blocks ("lunch",
+// "deep work") don't need a task.
+export const createTimeBlockInputSchema = z
+  .object({
+    taskId: z.string().cuid().optional().nullable(),
+    title: z.string().min(1).max(200).trim(),
+    startsAt: z.coerce.date(),
+    endsAt: z.coerce.date(),
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, "Must be hex like #3b82f6")
+      .optional()
+      .nullable(),
+  })
+  .refine((v) => v.endsAt > v.startsAt, {
+    message: "End time must be after start time",
+    path: ["endsAt"],
+  });
+export type CreateTimeBlockInput = z.infer<typeof createTimeBlockInputSchema>;
+
+// Partial update — the resize handle sends just { endsAt }, the edit
+// form may send any subset. Validating the cross-field invariant
+// requires both fields, so we leave that to the action.
+export const updateTimeBlockInputSchema = z.object({
+  taskId: z.string().cuid().optional().nullable(),
+  title: z.string().min(1).max(200).trim().optional(),
+  startsAt: z.coerce.date().optional(),
+  endsAt: z.coerce.date().optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Must be hex like #3b82f6")
+    .optional()
+    .nullable(),
+});
+export type UpdateTimeBlockInput = z.infer<typeof updateTimeBlockInputSchema>;
+
+// The calendar lists blocks for one week at a time. `weekOf` is the
+// Monday (UTC) of the target week in YYYY-MM-DD format.
+export const listBlocksFilterSchema = z.object({
+  weekOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+});
+export type ListBlocksFilter = z.infer<typeof listBlocksFilterSchema>;
