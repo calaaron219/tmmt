@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { getActiveTimer, listProjects, listTasks } from "./actions";
+import {
+  ensureTodayRoutineTasksForUser,
+  getActiveTimer,
+  listProjects,
+  listTasks,
+} from "./actions";
 import { ActiveTimerBanner } from "./active-timer-banner";
 import { ProjectFilter } from "./project-filter";
 import { QuickAddForm } from "./quick-add-form";
@@ -17,6 +22,10 @@ export default async function TimePage({
   // (or absent) means no filter. listTasks validates the value via zod.
   const projectFilter =
     project === "none" || (project && project !== "all") ? project : undefined;
+
+  // Generate today's routine tasks before listing so they appear in the
+  // same render. Idempotent — safe on every page load.
+  await ensureTodayRoutineTasksForUser();
 
   const [tasks, activeTimer, projects] = await Promise.all([
     listTasks({ includeDone, projectId: projectFilter }),
@@ -42,6 +51,12 @@ export default async function TimePage({
           </p>
         </div>
         <div className="flex items-center gap-4 text-sm font-medium">
+          <Link
+            href="/app/time/routines"
+            className="text-gray-700 hover:text-gray-900 transition"
+          >
+            Routines
+          </Link>
           <Link
             href="/app/time/projects"
             className="text-gray-700 hover:text-gray-900 transition"

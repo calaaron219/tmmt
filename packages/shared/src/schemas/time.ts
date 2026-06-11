@@ -62,3 +62,21 @@ export type CreateProjectInput = z.infer<typeof createProjectInputSchema>;
 
 export const updateProjectInputSchema = createProjectInputSchema.partial();
 export type UpdateProjectInput = z.infer<typeof updateProjectInputSchema>;
+
+// ─── Routines ────────────────────────────────────────────
+// Routines are DAILY-only in v1 — no cadence field. A future "cadence"
+// column defaulting to DAILY will be backwards-compatible. Generated
+// tasks inherit title/priority/estimateMinutes/projectId from their
+// Routine; description is template-only and not copied (intentional —
+// tasks usually accumulate their own notes).
+export const createRoutineInputSchema = z.object({
+  title: z.string().min(1).max(200).trim(),
+  description: z.string().max(2000).optional().nullable(),
+  priority: taskPrioritySchema.default("MEDIUM"),
+  estimateMinutes: z.number().int().positive().max(60 * 24).optional().nullable(),
+  projectId: z.string().cuid().optional().nullable(),
+});
+export type CreateRoutineInput = z.infer<typeof createRoutineInputSchema>;
+
+export const updateRoutineInputSchema = createRoutineInputSchema.partial();
+export type UpdateRoutineInput = z.infer<typeof updateRoutineInputSchema>;
