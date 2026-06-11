@@ -52,6 +52,12 @@ export default async function TimePage({
         </div>
         <div className="flex items-center gap-4 text-sm font-medium">
           <Link
+            href="/app/time/calendar"
+            className="text-gray-700 hover:text-gray-900 transition"
+          >
+            Calendar
+          </Link>
+          <Link
             href="/app/time/routines"
             className="text-gray-700 hover:text-gray-900 transition"
           >

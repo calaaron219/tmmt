@@ -35,6 +35,7 @@ model User {
   timeEntries   TimeEntry[]
   projects      Project[]
   routines      Routine[]
+  timeBlocks    TimeBlock[]
 }
 
 model Account {
@@ -238,6 +239,7 @@ model Task {
   project     Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
   routine     Routine?    @relation(fields: [routineId], references: [id], onDelete: SetNull)
   timeEntries TimeEntry[]
+  timeBlocks  TimeBlock[]
 
   @@index([userId, status])
   @@index([userId, dueAt])
@@ -318,5 +320,37 @@ model TimeEntry {
 
   // Fast lookup of the active timer for a user (queried on every page load).
   @@index([userId, endedAt])
+  @@index([taskId])
+}
+
+// Planned time on the calendar. Separate from TimeEntry on purpose:
+// - TimeBlock = what was planned (scheduled in advance)
+// - TimeEntry = what actually happened (recorded by the timer)
+// Collapsing them into one table would force "did I do it?" and
+// "did I plan it?" into the same row.
+//
+// taskId is nullable so users can schedule free-form blocks ("deep
+// work", "lunch") without first creating a task. When set, the
+// calendar uses the task's project color as the block's default.
+//
+// startsAt/endsAt are absolute UTC timestamps. v1 disallows blocks
+// that span midnight (enforced in the action, not the schema) to
+// keep the grid math simple.
+model TimeBlock {
+  id       String   @id @default(cuid())
+  userId   String
+  taskId   String? // optional FK; null for free-form blocks
+  title    String // snapshot at create (or copied from task title)
+  startsAt DateTime
+  endsAt   DateTime
+  color    String? // optional override; falls back to task.project.color
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, startsAt])
   @@index([taskId])
 }

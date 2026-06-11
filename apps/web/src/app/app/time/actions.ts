@@ -11,6 +11,9 @@ import {
   updateProjectInputSchema,
   createRoutineInputSchema,
   updateRoutineInputSchema,
+  createTimeBlockInputSchema,
+  updateTimeBlockInputSchema,
+  listBlocksFilterSchema,
   type CreateTaskInput,
   type ListTasksFilter,
   type StartTimerInput,
@@ -19,8 +22,11 @@ import {
   type UpdateProjectInput,
   type CreateRoutineInput,
   type UpdateRoutineInput,
+  type CreateTimeBlockInput,
+  type UpdateTimeBlockInput,
+  type ListBlocksFilter,
 } from "@tmmt/shared";
-import type { Task, Project, Routine } from "@tmmt/db";
+import type { Task, Project, Routine, TimeBlock } from "@tmmt/db";
 import { revalidatePath } from "next/cache";
 
 async function requireUser() {
@@ -536,6 +542,158 @@ async function ensureTodayRoutineTasks(userId: string): Promise<number> {
 export async function ensureTodayRoutineTasksForUser(): Promise<number> {
   const userId = await requireUser();
   return ensureTodayRoutineTasks(userId);
+}
+
+// ─── Calendar time blocks ────────────────────────────────
+
+// A TimeBlock joined with the minimal task + project info the calendar
+// needs for color resolution and the "open task" link on the popover.
+export type TimeBlockWithTask = TimeBlock & {
+  task:
+    | (Pick<Task, "id" | "title"> & {
+        project: Pick<Project, "id" | "color" | "name"> | null;
+      })
+    | null;
+};
+
+// Parses "YYYY-MM-DD" as the UTC midnight of that calendar date. Used
+// for week-window bounds; pairs with how the calendar serializes dates.
+function parseUtcMidnight(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+// Lists all blocks that overlap the 7-day window [weekOf, weekOf + 7).
+// Cross-day blocks aren't allowed at create-time, so any block whose
+// startsAt is in the window will also have its endsAt in the window.
+export async function listBlocksForWeek(
+  raw: ListBlocksFilter
+): Promise<TimeBlockWithTask[]> {
+  const userId = await requireUser();
+  const filter = listBlocksFilterSchema.parse(raw);
+
+  const start = parseUtcMidnight(filter.weekOf);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 7);
+
+  return prisma.timeBlock.findMany({
+    where: {
+      userId,
+      startsAt: { gte: start, lt: end },
+    },
+    include: {
+      task: {
+        select: {
+          id: true,
+          title: true,
+          project: { select: { id: true, color: true, name: true } },
+        },
+      },
+    },
+    orderBy: { startsAt: "asc" },
+  });
+}
+
+// Shared validation: block must fit inside a single calendar day
+// (no midnight crossing in v1) and must be ≥ 5 minutes long.
+function validateBlockBounds(startsAt: Date, endsAt: Date) {
+  if (endsAt <= startsAt) {
+    throw new Error("End time must be after start time");
+  }
+  const minMinutes = 5;
+  if ((endsAt.getTime() - startsAt.getTime()) / 60000 < minMinutes) {
+    throw new Error(`Block must be at least ${minMinutes} minutes long`);
+  }
+  // "Same day" in UTC; the calendar uses UTC for the day boundary too.
+  const sameDayUtc =
+    startsAt.getUTCFullYear() === endsAt.getUTCFullYear() &&
+    startsAt.getUTCMonth() === endsAt.getUTCMonth() &&
+    startsAt.getUTCDate() === endsAt.getUTCDate();
+  if (!sameDayUtc) {
+    throw new Error("Block cannot cross midnight (v1 limit)");
+  }
+}
+
+export async function createTimeBlock(raw: CreateTimeBlockInput) {
+  const userId = await requireUser();
+  const input = createTimeBlockInputSchema.parse(raw);
+
+  validateBlockBounds(input.startsAt, input.endsAt);
+
+  if (input.taskId) {
+    const owned = await prisma.task.findFirst({
+      where: { id: input.taskId, userId },
+      select: { id: true },
+    });
+    if (!owned) {
+      throw new Error("Task not found");
+    }
+  }
+
+  const block = await prisma.timeBlock.create({
+    data: {
+      userId,
+      taskId: input.taskId ?? null,
+      title: input.title,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      color: input.color ?? null,
+    },
+  });
+
+  revalidatePath("/app/time/calendar");
+  return block;
+}
+
+export async function updateTimeBlock(id: string, raw: UpdateTimeBlockInput) {
+  const userId = await requireUser();
+  const input = updateTimeBlockInputSchema.parse(raw);
+
+  const existing = await prisma.timeBlock.findFirst({
+    where: { id, userId },
+  });
+  if (!existing) {
+    throw new Error("Block not found");
+  }
+
+  const nextStartsAt = input.startsAt ?? existing.startsAt;
+  const nextEndsAt = input.endsAt ?? existing.endsAt;
+  validateBlockBounds(nextStartsAt, nextEndsAt);
+
+  if (input.taskId) {
+    const owned = await prisma.task.findFirst({
+      where: { id: input.taskId, userId },
+      select: { id: true },
+    });
+    if (!owned) {
+      throw new Error("Task not found");
+    }
+  }
+
+  const block = await prisma.timeBlock.update({
+    where: { id },
+    data: {
+      ...(input.taskId !== undefined && { taskId: input.taskId }),
+      ...(input.title !== undefined && { title: input.title }),
+      ...(input.startsAt !== undefined && { startsAt: input.startsAt }),
+      ...(input.endsAt !== undefined && { endsAt: input.endsAt }),
+      ...(input.color !== undefined && { color: input.color }),
+    },
+  });
+
+  revalidatePath("/app/time/calendar");
+  return block;
+}
+
+export async function deleteTimeBlock(id: string) {
+  const userId = await requireUser();
+  const result = await prisma.timeBlock.deleteMany({
+    where: { id, userId },
+  });
+  if (result.count === 0) {
+    throw new Error("Block not found");
+  }
+  revalidatePath("/app/time/calendar");
 }
 
 // Stops the user's currently-running timer (no-op if there isn't one).
