@@ -27,7 +27,13 @@ import {
   type ListBlocksFilter,
 } from "@tmmt/shared";
 import type { Task, Project, Routine, TimeBlock } from "@tmmt/db";
+import type {
+  PlannerExistingBlock,
+  PlannerTask,
+  ProposedBlock,
+} from "@tmmt/shared";
 import { revalidatePath } from "next/cache";
+import { aiPlanner } from "@/lib/ai-planner";
 
 async function requireUser() {
   const session = await auth();
@@ -694,6 +700,213 @@ export async function deleteTimeBlock(id: string) {
     throw new Error("Block not found");
   }
   revalidatePath("/app/time/calendar");
+}
+
+// ─── AI day planner ──────────────────────────────────────
+
+// Working window the planner targets. Narrower than the calendar grid
+// (6am–10pm) on purpose: most users want the plan inside roughly a
+// workday. Configurable later via user prefs (Phase 4+).
+const PLANNER_START_HHMM = "09:00";
+const PLANNER_END_HHMM = "18:00";
+
+// Returns YYYY-MM-DD (UTC) for "today".
+function todayUtcYmd(): string {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  )
+    .toISOString()
+    .slice(0, 10);
+}
+
+function hhmm(d: Date): string {
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(
+    d.getUTCMinutes()
+  ).padStart(2, "0")}`;
+}
+
+export type PlanProposalView = {
+  date: string;
+  workingHoursStart: string;
+  workingHoursEnd: string;
+  proposals: (ProposedBlock & {
+    // Project color (resolved via the linked task) so the proposal
+    // preview can use the same accent as the calendar.
+    color: string | null;
+  })[];
+  summary?: string;
+};
+
+// Gathers today's context, calls the LLM, returns the proposed plan.
+// Does NOT persist — that's applyPlan's job, gated by an explicit user
+// click. Keeping the read action side-effect-free makes it easy to
+// retry / re-roll without surprises.
+export async function planMyDay(): Promise<PlanProposalView> {
+  const userId = await requireUser();
+  const date = todayUtcYmd();
+
+  // Today's UTC window for the existingBlocks lookup.
+  const startOfDay = new Date(`${date}T00:00:00.000Z`);
+  const endOfDay = new Date(startOfDay);
+  endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+
+  const [tasks, blocks, completedSums] = await Promise.all([
+    prisma.task.findMany({
+      where: { userId, status: { in: ["TODO", "IN_PROGRESS"] } },
+      include: {
+        project: { select: { id: true, name: true, color: true } },
+      },
+      orderBy: [{ priority: "desc" }, { dueAt: "asc" }],
+      take: 50,
+    }),
+    prisma.timeBlock.findMany({
+      where: {
+        userId,
+        startsAt: { gte: startOfDay, lt: endOfDay },
+      },
+      orderBy: { startsAt: "asc" },
+    }),
+    prisma.timeEntry.groupBy({
+      by: ["taskId"],
+      where: { userId, endedAt: { not: null } },
+      _sum: { durationSeconds: true },
+    }),
+  ]);
+
+  const trackedByTask = new Map(
+    completedSums.map((s) => [s.taskId, s._sum.durationSeconds ?? 0])
+  );
+
+  const plannerTasks: PlannerTask[] = tasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    priority: t.priority,
+    estimateMinutes: t.estimateMinutes,
+    dueOn: t.dueAt ? t.dueAt.toISOString().slice(0, 10) : null,
+    trackedMinutes: Math.round((trackedByTask.get(t.id) ?? 0) / 60),
+    projectName: t.project?.name ?? null,
+  }));
+
+  const existingBlocks: PlannerExistingBlock[] = blocks.map((b) => ({
+    startHhMm: hhmm(b.startsAt),
+    endHhMm: hhmm(b.endsAt),
+    title: b.title,
+  }));
+
+  const result = await aiPlanner.planDay({
+    date,
+    workingHoursStart: PLANNER_START_HHMM,
+    workingHoursEnd: PLANNER_END_HHMM,
+    openTasks: plannerTasks,
+    existingBlocks,
+  });
+
+  // Decorate each proposal with the color it'll get when persisted.
+  // Cheaper to resolve here than re-query when the user clicks Apply.
+  const taskById = new Map(tasks.map((t) => [t.id, t]));
+  const proposalsWithColor = result.proposals.map((p) => ({
+    ...p,
+    color: p.taskId
+      ? (taskById.get(p.taskId)?.project?.color ?? null)
+      : null,
+  }));
+
+  return {
+    date,
+    workingHoursStart: PLANNER_START_HHMM,
+    workingHoursEnd: PLANNER_END_HHMM,
+    proposals: proposalsWithColor,
+    summary: result.summary,
+  };
+}
+
+// Persists the proposals the user accepted as real TimeBlock rows.
+// Input is the array of accepted proposals (the UI may have dropped
+// some before calling). Validation here is the same as createTimeBlock
+// (ownership + bounds), per-row — drops anything that fails rather
+// than nuking the whole apply.
+export async function applyPlan(
+  raw: { date: string; proposals: ProposedBlock[] }
+): Promise<{ created: number; skipped: number }> {
+  const userId = await requireUser();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw.date)) {
+    throw new Error("Invalid date — use YYYY-MM-DD");
+  }
+  const proposals = Array.isArray(raw.proposals) ? raw.proposals : [];
+  if (proposals.length === 0) {
+    return { created: 0, skipped: 0 };
+  }
+
+  const [y, m, d] = raw.date.split("-").map(Number);
+  const dayStart = new Date(Date.UTC(y, m - 1, d));
+
+  // Pre-fetch the set of valid task ids once. Per-row .findFirst would
+  // be N queries for nothing — a single in: query handles ownership.
+  const candidateTaskIds = proposals
+    .map((p) => p.taskId)
+    .filter((id): id is string => id !== null);
+  const ownedTaskIds = new Set(
+    candidateTaskIds.length > 0
+      ? (
+          await prisma.task.findMany({
+            where: { id: { in: candidateTaskIds }, userId },
+            select: { id: true },
+          })
+        ).map((t) => t.id)
+      : []
+  );
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const p of proposals) {
+    if (!/^\d{2}:\d{2}$/.test(p.startHhMm) || !/^\d{2}:\d{2}$/.test(p.endHhMm)) {
+      skipped++;
+      continue;
+    }
+    if (p.taskId !== null && !ownedTaskIds.has(p.taskId)) {
+      skipped++;
+      continue;
+    }
+    const [sh, sm] = p.startHhMm.split(":").map(Number);
+    const [eh, em] = p.endHhMm.split(":").map(Number);
+    const startsAt = new Date(dayStart);
+    startsAt.setUTCHours(sh, sm, 0, 0);
+    const endsAt = new Date(dayStart);
+    endsAt.setUTCHours(eh, em, 0, 0);
+
+    if (endsAt <= startsAt) {
+      skipped++;
+      continue;
+    }
+    // Drop anything outside the day or shorter than the calendar's
+    // 5-min minimum — same invariant validateBlockBounds enforces.
+    if ((endsAt.getTime() - startsAt.getTime()) / 60000 < 5) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      await prisma.timeBlock.create({
+        data: {
+          userId,
+          taskId: p.taskId ?? null,
+          title: p.title.slice(0, 200),
+          startsAt,
+          endsAt,
+          color: null, // inherits task → project color in the UI
+        },
+      });
+      created++;
+    } catch {
+      skipped++;
+    }
+  }
+
+  revalidatePath("/app/time/calendar");
+  return { created, skipped };
 }
 
 // Stops the user's currently-running timer (no-op if there isn't one).

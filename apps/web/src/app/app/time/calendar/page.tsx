@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listBlocksForWeek, listTasks } from "../actions";
+import { PlanMyDay } from "./plan-my-day";
 import { WeekGrid } from "./week-grid";
 
 // Returns YYYY-MM-DD (UTC) of the Monday of the week containing `date`.
@@ -93,6 +94,10 @@ export default async function CalendarPage({
           </Link>
         </div>
       </div>
+
+      {/* Plan-my-day only on the current week — planning past/future weeks
+          isn't supported in v1 (the planner targets today). */}
+      {weekOf === today && <PlanMyDay />}
 
       <WeekGrid weekOf={weekOf} blocks={blocks} tasks={tasks} />
     </div>
