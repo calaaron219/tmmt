@@ -1,17 +1,13 @@
 /**
- * Shared identifiers for the `system` queue.
- *
- * The producer (system.bootstrap), the worker (system.processor), and the
- * health check all import these literals so the queue + job names can never
- * drift apart.
+ * Shared identifiers for the `system` queue — a lightweight liveness queue.
+ * (PR #1 also had a demo `heartbeat`; PR #2 retired it now that the `routines`
+ * queue is the real scheduled work.)
  */
 export const SYSTEM_QUEUE = 'system';
 
 export const SystemJob = {
   /** One-off job enqueued on every boot — proves producer → Redis → worker. */
   Ping: 'ping',
-  /** Repeatable job — proves the scheduler mechanism PR #2's routine cron uses. */
-  Heartbeat: 'heartbeat',
 } as const;
 
 export type SystemJobName = (typeof SystemJob)[keyof typeof SystemJob];

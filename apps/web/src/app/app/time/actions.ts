@@ -476,10 +476,16 @@ export async function deleteRoutine(id: string) {
   revalidatePath("/app/time");
 }
 
-// Lazy generator. Called from /app/time page load. Per decision #3 in
-// docs/decisions/phase-3-time-system.md: no background worker yet, so
-// generation happens inline. `lastGeneratedFor` is set to today's UTC
-// midnight; routines with a `lastGeneratedFor >= today` are skipped.
+// Lazy generator. Called from /app/time page load as a FALLBACK — as of
+// Phase 4 PR #2 a BullMQ daily cron (apps/api) generates these at 00:05 UTC;
+// this lazy path still covers a user who opens the app before the cron runs.
+//
+// ⚠️ KEEP IN SYNC WITH apps/api/src/routines/generate-routine-tasks.ts
+// (generateTodayRoutineTasks). The logic is duplicated, not shared — if you
+// change the generation rules here, change them there too.
+//
+// `lastGeneratedFor` is set to today's UTC midnight; routines with a
+// `lastGeneratedFor >= today` are skipped.
 //
 // Idempotency: the WHERE clause filters out already-generated routines,
 // and the per-routine update inside the transaction makes a fast double-
